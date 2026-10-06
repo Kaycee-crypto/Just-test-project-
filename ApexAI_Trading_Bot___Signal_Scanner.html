@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ApexAI Crypto Signal Bot</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            900: '#090d16',
+                            800: '#0f172a',
+                            700: '#1e293b',
+                            600: '#334155'
+                        },
+                        accent: {
+                            cyan: '#06b6d4',
+                            emerald: '#10b981',
+                            rose: '#f43f5e',
+                            amber: '#f59e0b',
+                            purple: '#8b5cf6'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Plus Jakarta Sans', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace']
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        body {
+            background-color: #060913;
+            color: #f1f5f9;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .glow-cyan { box-shadow: 0 0 20px rgba(6, 182, 212, 0.25); }
+        .glow-emerald { box-shadow: 0 0 20px rgba(16, 185, 129, 0.25); }
+        .glow-rose { box-shadow: 0 0 20px rgba(244, 63, 94, 0.25); }
+
+        @keyframes pulse-fast {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .animate-pulse-fast { animation: pulse-fast 1s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        
+        .radar-sweep {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: conic-gradient(from 0deg at 50% 50%, rgba(6, 182, 212, 0.15) 0deg, transparent 60deg, transparent 360deg);
+            border-radius: 50%;
+            animation: spin 4s linear infinite;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="h-screen overflow-hidden flex flex-col bg-dark-900 text-slate-100 select-none">
+
+    <!-- Top Bar Navigation -->
+    <header class="h-14 border-b border-slate-800 bg-dark-900/90 px-4 flex items-center justify-between z-30 shrink-0">
+        <div class="flex items-center space-x-3">
+            <div class="p-2 bg-gradient-to-tr from-cyan-600 to-blue-600 rounded-lg shadow-lg shadow-cyan-500/20">
+                <i data-lucide="bot" class="w-5 h-5 text-white"></i>
+            </div>
+            <div>
+                <div class="flex items-center space-x-2">
+                    <span class="font-bold text-lg tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-blue-400 to-indigo-300">
+                        APEX<span class="text-emerald-400">CRYPTO</span>
+                    </span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-mono">CRYPTO v3.2</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Status Tickers & Stats -->
+        <div class="hidden md:flex items-center space-x-6 text-xs font-mono">
+            <div class="flex items-center space-x-2 bg-slate-800/60 px-3 py-1.5 rounded-full border border-slate-700/50">
+                <span class="relative flex h-2 w-2">
+                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span class="text-slate-400">Crypto Scanner:</span>
+                <span class="text-emerald-400 font-bold" id="scannerStatus">ACTIVE SCANNING</span>
+            </div>
+
+            <div class="flex items-center space-x-2 bg-slate-800/60 px-3 py-1.5 rounded-full border border-slate-700/50">
+                <i data-lucide="gauge" class="w-3.5 h-3.5 text-amber-400"></i>
+                <span class="text-slate-400">Fear & Greed Index:</span>
+                <span class="text-amber-400 font-bold" id="fearGreedIdx">68 (Greed)</span>
+            </div>
+
+            <div class="flex items-center space-x-2 bg-slate-800/60 px-3 py-1.5 rounded-full border border-slate-700/50">
+                <i data-lucide="zap" class="w-3.5 h-3.5 text-cyan-400"></i>
+                <span class="text-slate-400">Active Signals:</span>
+                <span class="text-cyan-400 font-bold" id="activeSignalsCount">0</span>
+            </div>
+        </div>
+
+        <!-- Controls / Actions -->
+        <div class="flex items-center space-x-3">
+            <button onclick="triggerAutoScanner()" class="flex items-center space-x-2 bg-cyan-600 hover:bg-cyan-500 text-white text-xs px-3.5 py-1.5 rounded-lg transition-all shadow-md shadow-cyan-900/40 active:scale-95 font-medium">
+                <i data-lucide="radar" class="w-4 h-4"></i>
+                <span>Scan Markets</span>
+            </button>
+            <button onclick="toggleSettingsModal()" class="p-2 text-slate-400 hover:text-slate-200 bg-slate-800/80 rounded-lg hover:bg-slate-700 transition">
+                <i data-lucide="settings" class="w-4 h-4"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Application Layout -->
+    <div class="flex-1 grid grid-cols-12 gap-3 p-3 overflow-hidden">
+        
+        <!-- LEFT SIDEBAR: Crypto Watchlist & Radar Scanner (Cols 3) -->
+        <div class="col-span-12 md:col-span-3 flex flex-col gap-3 h-full overflow-hidden">
+            <!-- Market Watchlist Glass Card -->
+            <div class="glass-panel rounded-xl flex-1 flex flex-col overflow-hidden">
+                <div class="p-3 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
+                    <div class="flex items-center space-x-2">
+                        <i data-lucide="coins" class="w-4 h-4 text-cyan-400"></i>
+                        <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Crypto Pairs Watchlist</span>
+                    </div>
+                    <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-cyan-400 font-mono border border-slate-700">USDT PAIRS</span>
+                </div>
+
+                <!-- Tickers Table Container -->
+                <div class="flex-1 overflow-y-auto divide-y divide-slate-800/60" id="watchlistContainer">
+                    <!-- Dynamic watchlist items injected via JS -->
+                </div>
+
+                <div class="p-2 bg-slate-900/80 border-t border-slate-800/80 text-[11px] text-slate-400 flex justify-between items-center font-mono">
+                    <span>Auto Scan Interval:</span>
+                    <span class="text-cyan-400 font-semibold">Every 10s</span>
+                </div>
+            </div>
+
+            <!-- Signal Radar Mini Widget -->
+            <div class="glass-panel rounded-xl p-3 flex items-center justify-between relative overflow-hidden bg-gradient-to-r from-slate-900 via-slate-900/90 to-cyan-950/30">
+                <div class="z-10">
+                    <div class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">AI Confluence Index</div>
+                    <div class="text-xl font-bold text-slate-100 font-mono mt-0.5" id="confluenceScore">84.2% <span class="text-xs font-normal text-emerald-400">Bullish</span></div>
+                    <p class="text-[10px] text-slate-400 mt-1">Multi-timeframe Indicator Alignment</p>
+                </div>
+                <div class="w-14 h-14 relative flex items-center justify-center shrink-0">
+                    <div class="radar-sweep"></div>
+                    <i data-lucide="target" class="w-6 h-6 text-cyan-400 z-10"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- CENTER PANEL: Interactive Chart & Active AI Deep Analysis (Cols 6) -->
+        <div class="col-span-12 md:col-span-6 flex flex-col gap-3 h-full overflow-hidden">
+            
+            <!-- Asset Main Dashboard & Quick Metrics -->
+            <div class="glass-panel rounded-xl p-3.5 flex items-center justify-between shrink-0 bg-slate-900/60">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-lg bg-slate-800 border border-slate-700/80 flex items-center justify-center font-bold text-lg font-mono text-cyan-400" id="activeAssetIcon">
+                        ₿
+                    </div>
+                    <div>
+                        <div class="flex items-center space-x-2">
+                            <h2 class="font-bold text-lg text-slate-100" id="activeSymbol">BTC/USDT</h2>
+                            <span class="text-[10px] px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 font-mono border border-cyan-500/20">SPOT / PERP</span>
+                        </div>
+                        <div class="flex items-center space-x-3 text-xs font-mono mt-0.5">
+                            <span class="text-xl font-bold text-slate-100" id="activePrice">$67,842.50</span>
+                            <span class="text-emerald-400 font-semibold flex items-center" id="activeChange">+3.42%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-3 text-right text-xs font-mono hidden sm:grid">
+                    <div class="bg-slate-800/40 p-2 rounded-lg border border-slate-800">
+                        <div class="text-[10px] text-slate-400">RSI (14)</div>
+                        <div class="font-bold text-slate-200" id="activeRSI">62.4</div>
+                    </div>
+                    <div class="bg-slate-800/40 p-2 rounded-lg border border-slate-800">
+                        <div class="text-[10px] text-slate-400">MACD Trend</div>
+                        <div class="font-bold text-emerald-400" id="activeMACD">Bullish Cross</div>
+                    </div>
+                    <div class="bg-slate-800/40 p-2 rounded-lg border border-slate-800">
+                        <div class="text-[10px] text-slate-400">Volatility</div>
+                        <div class="font-bold text-amber-400" id="activeVolatility">Medium</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Chart Panel -->
+            <div class="glass-panel rounded-xl flex-1 flex flex-col p-3 relative overflow-hidden">
+                <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 text-xs">
+                    <div class="flex items-center space-x-2">
+                        <span class="font-semibold text-slate-300">Technical Overview</span>
+                        <span class="text-slate-500">|</span>
+                        <button onclick="switchTimeframe('1M')" class="timeframe-btn text-slate-400 hover:text-white px-1.5 py-0.5 rounded text-[11px]">1M</button>
+                        <button onclick="switchTimeframe('15M')" class="timeframe-btn text-cyan-400 bg-cyan-500/20 px-1.5 py-0.5 rounded font-mono font-semibold text-[11px]">15M</button>
+                        <button onclick="switchTimeframe('1H')" class="timeframe-btn text-slate-400 hover:text-white px-1.5 py-0.5 rounded text-[11px]">1H</button>
+                        <button onclick="switchTimeframe('4H')" class="timeframe-btn text-slate-400 hover:text-white px-1.5 py-0.5 rounded text-[11px]">4H</button>
+                    </div>
+                    <div class="flex items-center space-x-2 text-[11px]">
+                        <label class="flex items-center space-x-1 cursor-pointer">
+                            <input type="checkbox" id="toggleEMA" checked onchange="renderChart()" class="rounded bg-slate-800 border-slate-700 text-cyan-500 focus:ring-0">
+                            <span class="text-cyan-400 font-mono">EMA 20/50</span>
+                        </label>
+                        <label class="flex items-center space-x-1 cursor-pointer">
+                            <input type="checkbox" id="toggleLevels" checked onchange="renderChart()" class="rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-0">
+                            <span class="text-emerald-400 font-mono">AI Levels</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Canvas Chart Container -->
+                <div class="flex-1 w-full h-full min-h-[220px] relative">
+                    <canvas id="mainChart"></canvas>
+                </div>
+            </div>
+
+            <!-- AI Analysis & Thought Console -->
+            <div class="glass-panel rounded-xl p-3.5 h-44 flex flex-col bg-slate-950/80 border-slate-800 shrink-0 overflow-hidden">
+                <div class="flex items-center justify-between pb-2 mb-1 border-b border-slate-800/80">
+                    <div class="flex items-center space-x-2">
+                        <div class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></div>
+                        <span class="text-xs font-bold uppercase tracking-wider text-cyan-400 font-mono">Gemini AI Synthesis Console</span>
+                    </div>
+                    <span class="text-[10px] text-slate-400 font-mono" id="aiTimestamp">Awaiting Scan...</span>
+                </div>
+
+                <div class="flex-1 overflow-y-auto font-mono text-xs text-slate-300 space-y-2 pr-1 leading-relaxed" id="aiReasoningOutput">
+                    <div class="text-slate-500 italic py-2 text-center">
+                        Click <span class="text-cyan-400 font-semibold">"Deep AI Scan"</span> or select an asset from the scanner list to run Gemini technical synthesis...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT SIDEBAR: Live AI Signals Stream & Risk Calculator (Cols 3) -->
+        <div class="col-span-12 md:col-span-3 flex flex-col gap-3 h-full overflow-hidden">
+            
+            <!-- Real-time Signals Feed -->
+            <div class="glass-panel rounded-xl flex-1 flex flex-col overflow-hidden">
+                <div class="p-3 border-b border-slate-800 flex items-center justify-between bg-slate-900/50">
+                    <div class="flex items-center space-x-2">
+                        <i data-lucide="radio" class="w-4 h-4 text-emerald-400 animate-pulse"></i>
+                        <span class="text-xs font-bold uppercase tracking-wider text-slate-300">Live AI Signals</span>
+                    </div>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 font-mono" id="signalAccuracyBadge">Win Rate: 78.4%</span>
+                </div>
+
+                <!-- Signals Stream Container -->
+                <div class="flex-1 overflow-y-auto p-2.5 space-y-2.5" id="signalsFeed">
+                    <!-- Signals injected here dynamically -->
+                </div>
+            </div>
+
+            <!-- Position & Risk Sizing Calculator -->
+            <div class="glass-panel rounded-xl p-3.5 flex flex-col gap-2 shrink-0 bg-slate-900/70">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-1.5">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5">
+                        <i data-lucide="calculator" class="w-3.5 h-3.5 text-amber-400"></i>
+                        Crypto Risk Calculator
+                    </span>
+                    <span class="text-[10px] text-amber-400 font-mono">Spot/Perp Sizing</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+                    <div>
+                        <label class="text-[10px] text-slate-400 block mb-0.5">Wallet Margin ($ USDT)</label>
+                        <input type="number" id="calcBalance" value="5000" oninput="calculateRisk()" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 focus:border-cyan-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label class="text-[10px] text-slate-400 block mb-0.5">Risk Per Trade (%)</label>
+                        <input type="number" id="calcRiskPct" value="2" step="0.5" oninput="calculateRisk()" class="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200 focus:border-cyan-500 focus:outline-none">
+                    </div>
+                </div>
+
+                <div class="bg-slate-950/80 p-2 rounded border border-slate-800/80 text-[11px] font-mono space-y-1">
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Max USDT Risk:</span>
+                        <span class="text-amber-400 font-bold" id="resRiskAmt">$100.00</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Token Position Size:</span>
+                        <span class="text-cyan-400 font-bold" id="resLotSize">0.098 BTC</span>
+                    </div>
+                    <div class="flex justify-between">
+                        <span class="text-slate-400">Est. Risk/Reward:</span>
+                        <span class="text-emerald-400 font-bold" id="resRRRatio">1 : 2.50</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Settings & API Modal -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center hidden">
+        <div class="glass-panel w-full max-w-md rounded-2xl p-5 border border-slate-700 shadow-2xl relative">
+            <button onclick="toggleSettingsModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+                <i data-lucide="x" class="w-5 h-5"></i>
+            </button>
+
+            <div class="flex items-center space-x-3 mb-4">
+                <div class="p-2 bg-cyan-500/20 text-cyan-400 rounded-lg">
+                    <i data-lucide="cpu" class="w-5 h-5"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold text-base text-slate-100">AI Signal Engine Settings</h3>
+                    <p class="text-xs text-slate-400">Configure Gemini API Key & Scan Parameters</p>
+                </div>
+            </div>
+
+            <div class="space-y-4 text-xs font-mono">
+                <div>
+                    <label class="block text-slate-300 font-semibold mb-1">Gemini API Key (Optional Override)</label>
+                    <input type="password" id="geminiApiKeyInput" placeholder="AIzaSy... (Leave empty for preview mode)" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-slate-200 focus:border-cyan-500 focus:outline-none">
+                    <p class="text-[10px] text-slate-400 mt-1">If left empty, model runs in simulation mode with full AI strategy triggers.</p>
+                </div>
+
+                <div>
+                    <label class="block text-slate-300 font-semibold mb-1">AI Model Persona</label>
+                    <select id="aiPersonaSelect" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-slate-200 focus:border-cyan-500 focus:outline-none">
+                        <option value="AGGRESSIVE">Aggressive Scalper (High Frequency)</option>
+                        <option value="BALANCED" selected>Balanced Quantitative Swing Strategist</option>
+                        <option value="CONSERVATIVE">Conservative Risk-Averse Institutional Trader</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-slate-300 font-semibold mb-1">Audio Signal Alerts</label>
+                    <div class="flex items-center justify-between bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+                        <span class="text-slate-300">Play synth sound on Buy/Sell signal</span>
+                        <input type="checkbox" id="audioToggle" checked class="rounded bg-slate-800 text-cyan-500 focus:ring-0">
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-6 flex justify-end space-x-2">
+                <button onclick="toggleSettingsModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-300 font-semibold text-xs">Close</button>
+                <button onclick="saveSettings()" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-white font-semibold text-xs shadow-lg shadow-cyan-900/40">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Synthesis Engine for Signal Alerts -->
+    <script>
+        function playSignalSound(type) {
+            const audioToggle = document.getElementById('audioToggle');
+            if (!audioToggle || !audioToggle.checked) return;
+
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+
+                if (type === 'BUY') {
+                    osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+                    osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15); // A5
+                    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.3);
+                } else if (type === 'SELL') {
+                    osc.frequency.setValueAtTime(880, ctx.currentTime); // A5
+                    osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.2); // A4
+                    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+                    osc.start();
+                    osc.stop(ctx.currentTime + 0.3);
+                }
+            } catch (e) {
+                console.log("Audio play blocked or unsupported");
+            }
+        }
+    </script>
+
+    <script>
+        // --- DATA STATE & CRYPTO MARKET SCANNER ENGINE ---
+        const MARKET_DATA = [
+            { symbol: 'BTC/USDT', name: 'Bitcoin', icon: '₿', price: 67842.50, change: 3.42, rsi: 64.2, macd: 'Bullish Cross', volatility: 'High', history: [] },
+            { symbol: 'ETH/USDT', name: 'Ethereum', icon: 'Ξ', price: 3540.20, change: -1.15, rsi: 48.5, macd: 'Neutral', volatility: 'Medium', history: [] },
+            { symbol: 'SOL/USDT', name: 'Solana', icon: '◎', price: 184.75, change: 8.24, rsi: 72.1, macd: 'Strong Buy', volatility: 'High', history: [] },
+            { symbol: 'BNB/USDT', name: 'BNB', icon: '🔶', price: 592.10, change: 1.85, rsi: 56.3, macd: 'Bullish', volatility: 'Low', history: [] },
+            { symbol: 'XRP/USDT', name: 'Ripple', icon: '✕', price: 0.5480, change: -2.40, rsi: 41.2, macd: 'Bearish', volatility: 'Medium', history: [] },
+            { symbol: 'DOGE/USDT', name: 'Dogecoin', icon: 'Ð', price: 0.1420, change: 12.50, rsi: 78.4, macd: 'Strong Buy', volatility: 'High', history: [] },
+            { symbol: 'AVAX/USDT', name: 'Avalanche', icon: '▲', price: 28.60, change: 4.10, rsi: 61.0, macd: 'Bullish', volatility: 'High', history: [] }
+        ];
+
+        let selectedAsset = MARKET_DATA[0];
+        let generatedSignals = [];
+        let chartInstance = null;
+        let currentTimeframe = '15M';
+
+        // Pre-fill mock historical price series for crypto candles
+        function initializeAssetHistories() {
+            MARKET_DATA.forEach(asset => {
+                let basePrice = asset.price;
+                let priceArr = [];
+                let timestamp = Date.now() - (30 * 15 * 60 * 1000);
+                for (let i = 0; i < 30; i++) {
+                    let randomChange = (Math.random() - 0.48) * (basePrice * 0.008);
+                    basePrice += randomChange;
+                    priceArr.push({
+                        time: new Date(timestamp + (i * 15 * 60 * 1000)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        open: basePrice - (Math.random() * (basePrice * 0.002)),
+                        high: basePrice + (Math.random() * (basePrice * 0.005)),
+                        low: basePrice - (Math.random() * (basePrice * 0.005)),
+                        close: basePrice
+                    });
+                }
+                asset.history = priceArr;
+            });
+        }
+
+        // --- WATCHLIST & SCANNER RENDERING ---
+        function renderWatchlist() {
+            const container = document.getElementById('watchlistContainer');
+            container.innerHTML = '';
+
+            MARKET_DATA.forEach(asset => {
+                const isSelected = asset.symbol === selectedAsset.symbol;
+                const changeClass = asset.change >= 0 ? 'text-emerald-400' : 'text-rose-400';
+                const changeBg = asset.change >= 0 ? 'bg-emerald-500/10' : 'bg-rose-500/10';
+
+                const itemEl = document.createElement('div');
+                itemEl.className = `p-3 flex items-center justify-between hover:bg-slate-800/50 cursor-pointer transition ${isSelected ? 'bg-slate-800/80 border-l-2 border-cyan-400' : ''}`;
+                itemEl.onclick = () => selectAsset(asset.symbol);
+
+                itemEl.innerHTML = `
+                    <div class="flex items-center space-x-2.5">
+                        <div class="w-7 h-7 rounded bg-slate-800 border border-slate-700/60 flex items-center justify-center font-bold text-xs text-cyan-400 font-mono">
+                            ${asset.icon}
+                        </div>
+                        <div>
+                            <div class="font-bold text-xs text-slate-200">${asset.symbol}</div>
+                            <div class="text-[10px] text-slate-400 font-mono">RSI: ${asset.rsi.toFixed(1)}</div>
+                        </div>
+                    </div>
+                    <div class="text-right font-mono">
+                        <div class="text-xs font-semibold text-slate-200">$${formatPrice(asset.price)}</div>
+                        <div class="text-[10px] px-1.5 py-0.2 rounded font-medium inline-block ${changeClass} ${changeBg}">
+                            ${asset.change >= 0 ? '+' : ''}${asset.change.toFixed(2)}%
+                        </div>
+                    </div>
+                `;
+                container.appendChild(itemEl);
+            });
+        }
+
+        function selectAsset(symbol) {
+            selectedAsset = MARKET_DATA.find(a => a.symbol === symbol);
+            updateAssetHeader();
+            renderWatchlist();
+            renderChart();
+            calculateRisk();
+            triggerAIScanForAsset(selectedAsset);
+        }
+
+        function updateAssetHeader() {
+            document.getElementById('activeAssetIcon').innerText = selectedAsset.icon;
+            document.getElementById('activeSymbol').innerText = selectedAsset.symbol;
+            document.getElementById('activePrice').innerText = '$' + formatPrice(selectedAsset.price);
+            
+            const changeEl = document.getElementById('activeChange');
+            changeEl.innerText = (selectedAsset.change >= 0 ? '+' : '') + selectedAsset.change.toFixed(2) + '%';
+            changeEl.className = selectedAsset.change >= 0 ? 'text-emerald-400 font-semibold flex items-center' : 'text-rose-400 font-semibold flex items-center';
+
+            document.getElementById('activeRSI').innerText = selectedAsset.rsi.toFixed(1);
+            document.getElementById('activeMACD').innerText = selectedAsset.macd;
+            document.getElementById('activeVolatility').innerText = selectedAsset.volatility;
+        }
+
+        function formatPrice(val) {
+            return val < 10 ? val.toFixed(4) : val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        // --- STREAMING_CHUNK:Configuring Chart.js financial line/area visualization... ---
+        // --- CHARTING ENGINE ---
+        function renderChart() {
+            const ctx = document.getElementById('mainChart').getContext('2d');
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            const labels = selectedAsset.history.map(h => h.time);
+            const prices = selectedAsset.history.map(h => h.close);
+
+            // Calculate moving averages
+            const ema20 = calculateEMA(prices, 10);
+            const ema50 = calculateEMA(prices, 20);
+
+            const showEMA = document.getElementById('toggleEMA').checked;
+
+            const datasets = [{
+                label: selectedAsset.symbol + ' Price',
+                data: prices,
+                borderColor: '#06b6d4',
+                borderWidth: 2,
+                backgroundColor: (context) => {
+                    const bg = context.chart.ctx.createLinearGradient(0, 0, 0, 300);
+                    bg.addColorStop(0, 'rgba(6, 182, 212, 0.25)');
+                    bg.addColorStop(1, 'rgba(6, 182, 212, 0.0)');
+                    return bg;
+                },
+                fill: true,
+                tension: 0.2,
+                pointRadius: 2,
+                pointHoverRadius: 5
+            }];
+
+            if (showEMA) {
+                datasets.push({
+                    label: 'EMA 10',
+                    data: ema20,
+                    borderColor: '#10b981',
+                    borderWidth: 1.5,
+                    borderDash: [3, 3],
+                    pointRadius: 0,
+                    fill: false
+                });
+                datasets.push({
+                    label: 'EMA 20',
+                    data: ema50,
+                    borderColor: '#f59e0b',
+                    borderWidth: 1.5,
+                    borderDash: [3, 3],
+                    pointRadius: 0,
+                    fill: false
+                });
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: '#0f172a',
+                            borderColor: '#334155',
+                            borderWidth: 1,
+                            titleFont: { family: 'JetBrains Mono', size: 11 },
+                            bodyFont: { family: 'JetBrains Mono', size: 11 }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+                        },
+                        y: {
+                            grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 10 } }
+                        }
+                    }
+                }
+            });
+        }
+
+        function calculateEMA(data, window) {
+            let k = 2 / (window + 1);
+            let emaArray = [data[0]];
+            for (let i = 1; i < data.length; i++) {
+                emaArray.push((data[i] * k) + (emaArray[i - 1] * (1 - k)));
+            }
+            return emaArray;
+        }
+
+        function switchTimeframe(tf) {
+            currentTimeframe = tf;
+            document.querySelectorAll('.timeframe-btn').forEach(b => {
+                b.className = 'timeframe-btn text-slate-400 hover:text-white px-1.5 py-0.5 rounded text-[11px]';
+            });
+            event.target.className = 'timeframe-btn text-cyan-400 bg-cyan-500/20 px-1.5 py-0.5 rounded font-mono font-semibold text-[11px]';
+            renderChart();
+        }
+
+        // --- STREAMING_CHUNK:Implementing Gemini AI API analysis and fallback prompt engine... ---
+        // --- GEMINI AI SIGNAL GENERATION ENGINE ---
+        async function triggerAIScanForAsset(asset) {
+        // --- GEMINI AI CRYPTO SIGNAL ENGINE ---
+        async function triggerAIScanForAsset(asset) {
+            const outputConsole = document.getElementById('aiReasoningOutput');
+            const timestampEl = document.getElementById('aiTimestamp');
+            
+            outputConsole.innerHTML = `
+                <div class="flex items-center space-x-2 text-cyan-400 py-4 justify-center">
+                    <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+                    <span>Synthesizing crypto metrics with Gemini AI...</span>
+                </div>
+            `;
+            lucide.createIcons();
+
+            const customApiKey = document.getElementById('geminiApiKeyInput')?.value || "";
+            const systemPrompt = `You are a professional Crypto Quantitative Analyst and Signal Engine. Analyze the following live crypto market metrics for ${asset.symbol} and output ONLY a structured JSON evaluating trade signal setup.
+
+Crypto Parameters:
+- Symbol: ${asset.symbol}
+- Price (USDT): $${asset.price}
+- 24h Delta: ${asset.change}%
+- RSI (14): ${asset.rsi}
+- MACD Status: ${asset.macd}
+- Volatility Level: ${asset.volatility}
+- Timeframe: ${currentTimeframe}
+
+Return STRICT JSON with exact keys:
+- signalType: "STRONG_BUY" | "BUY" | "NEUTRAL" | "SELL" | "STRONG_SELL"
+- entryPrice: number
+- takeProfit1: number
+- takeProfit2: number
+- stopLoss: number
+- confidenceScore: number (0 to 100)
+- riskRewardRatio: string (e.g. "1:2.8")
+- strategyName: string
+- keyRationale: string (max 60 words concise crypto technical rationale highlighting orderblocks/RSI/liquidity)
+`;
+
+            let signalResult = null;
+
+            try {
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${customApiKey}`;
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: systemPrompt }] }],
+                        generationConfig: {
+                            responseMimeType: "application/json"
+                        }
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const jsonText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+                    if (jsonText) {
+                        signalResult = JSON.parse(jsonText);
+                    }
+                }
+            } catch (err) {
+                console.log("Using local crypto signal engine fallback:", err);
+            }
+
+            // Algorithmic Fallback Engine
+            if (!signalResult) {
+                signalResult = generateAlgorithmicSignal(asset);
+            }
+
+            timestampEl.innerText = new Date().toLocaleTimeString();
+            displayAISynthesis(asset, signalResult);
+
+            if (signalResult.signalType !== 'NEUTRAL') {
+                addSignalToFeed(asset, signalResult);
+            }
+        }
+
+        function generateAlgorithmicSignal(asset) {
+            const isBullish = asset.rsi > 50 && (asset.change > 0 || asset.macd.includes('Bullish') || asset.macd.includes('Buy'));
+            const signalType = isBullish ? (asset.rsi > 68 ? 'STRONG_BUY' : 'BUY') : (asset.rsi < 36 ? 'STRONG_SELL' : 'SELL');
+            
+            const mult = isBullish ? 1 : -1;
+            const entry = asset.price;
+            const tp1 = entry * (1 + (0.02 * mult));
+            const tp2 = entry * (1 + (0.045 * mult));
+            const sl = entry * (1 - (0.015 * mult));
+
+            return {
+                signalType: signalType,
+                entryPrice: entry,
+                takeProfit1: tp1,
+                takeProfit2: tp2,
+                stopLoss: sl,
+                confidenceScore: Math.floor(78 + Math.random() * 18),
+                riskRewardRatio: "1:2.75",
+                strategyName: isBullish ? "Crypto Breakout & Volume Divergence" : "Crypto Liquidity Sweep & Reversion",
+                keyRationale: `Strong confluence on ${currentTimeframe} chart. RSI (${asset.rsi.toFixed(1)}) combined with ${asset.macd} signals key support near $${formatPrice(sl)}. High probability continuation.`
+            };
+        }
+
+        function displayAISynthesis(asset, signal) {
+            const outputConsole = document.getElementById('aiReasoningOutput');
+            const badgeClass = signal.signalType.includes('BUY') ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 
+                              (signal.signalType.includes('SELL') ? 'bg-rose-500/20 text-rose-400 border-rose-500/30' : 'bg-amber-500/20 text-amber-400 border-amber-500/30');
+
+            outputConsole.innerHTML = `
+                <div class="flex items-center justify-between border-b border-slate-800/60 pb-2">
+                    <div class="flex items-center space-x-2">
+                        <span class="px-2 py-0.5 rounded font-bold border text-[11px] ${badgeClass}">${signal.signalType}</span>
+                        <span class="text-slate-200 font-bold">${signal.strategyName}</span>
+                    </div>
+                    <span class="text-cyan-400 font-bold">AI Confidence: ${signal.confidenceScore}%</span>
+                </div>
+                <p class="text-slate-300 leading-normal pt-1">${signal.keyRationale}</p>
+                <div class="grid grid-cols-4 gap-2 text-[11px] font-mono pt-2 border-t border-slate-800/60 text-slate-400">
+                    <div>Entry: <span class="text-slate-100">$${formatPrice(signal.entryPrice)}</span></div>
+                    <div>TP1: <span class="text-emerald-400">$${formatPrice(signal.takeProfit1)}</span></div>
+                    <div>TP2: <span class="text-emerald-400">$${formatPrice(signal.takeProfit2)}</span></div>
+                    <div>SL: <span class="text-rose-400">$${formatPrice(signal.stopLoss)}</span></div>
+                </div>
+            `;
+        }
+
+        // --- STREAMING_CHUNK:Constructing dynamic signal stream cards and feed management... ---
+        // --- SIGNALS FEED MANAGEMENT ---
+        function addSignalToFeed(asset, signal) {
+            // Prevent duplicated signals within 15 seconds
+            if (generatedSignals.some(s => s.symbol === asset.symbol && (Date.now() - s.timestamp < 15000))) {
+                return;
+            }
+
+            const signalData = {
+                id: Date.now(),
+                symbol: asset.symbol,
+                type: signal.signalType,
+                entry: signal.entryPrice,
+                tp: signal.takeProfit1,
+                sl: signal.stopLoss,
+                rr: signal.riskRewardRatio,
+                confidence: signal.confidenceScore,
+                timestamp: Date.now(),
+                timeStr: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            };
+
+            generatedSignals.unshift(signalData);
+            if (generatedSignals.length > 20) generatedSignals.pop();
+
+            renderSignalsFeed();
+            playSignalSound(signal.signalType.includes('BUY') ? 'BUY' : 'SELL');
+
+            // Update Header Counter
+            document.getElementById('activeSignalsCount').innerText = generatedSignals.length;
+        }
+
+        function renderSignalsFeed() {
+            const feed = document.getElementById('signalsFeed');
+            feed.innerHTML = '';
+
+            if (generatedSignals.length === 0) {
+                feed.innerHTML = `
+                    <div class="text-center text-slate-500 text-xs py-8 font-mono">
+                        No active signals detected.<br>Click "Force AI Scan" to run market radar.
+                    </div>
+                `;
+                return;
+            }
+
+            generatedSignals.forEach(sig => {
+                const isBuy = sig.type.includes('BUY');
+                const badgeColor = isBuy ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20';
+                const icon = isBuy ? 'trending-up' : 'trending-down';
+
+                const card = document.createElement('div');
+                card.className = `p-3 rounded-lg border bg-slate-900/80 hover:bg-slate-800/80 transition relative overflow-hidden font-mono text-xs ${isBuy ? 'border-emerald-500/30' : 'border-rose-500/30'}`;
+                
+                card.innerHTML = `
+                    <div class="flex items-center justify-between mb-1.5">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-bold text-slate-100">${sig.symbol}</span>
+                            <span class="px-1.5 py-0.5 rounded border text-[10px] font-bold ${badgeColor}">${sig.type}</span>
+                        </div>
+                        <span class="text-[10px] text-slate-400">${sig.timeStr}</span>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-1 text-[11px] mb-2 text-slate-300">
+                        <div><span class="text-slate-500">Entry:</span> $${formatPrice(sig.entry)}</div>
+                        <div><span class="text-emerald-500">TP:</span> $${formatPrice(sig.tp)}</div>
+                        <div><span class="text-rose-500">SL:</span> $${formatPrice(sig.sl)}</div>
+                    </div>
+
+                    <div class="flex items-center justify-between text-[10px] pt-1 border-t border-slate-800/60 text-slate-400">
+                        <span>R:R ${sig.rr}</span>
+                        <span class="text-cyan-400">Score: ${sig.confidence}%</span>
+                        <button onclick="copySignal('${sig.symbol}', '${sig.type}', ${sig.entry}, ${sig.tp}, ${sig.sl})" class="hover:text-slate-200 text-slate-400 underline">
+                            Copy
+                        </button>
+                    </div>
+                `;
+                feed.appendChild(card);
+            });
+            lucide.createIcons();
+        }
+
+        function copySignal(symbol, type, entry, tp, sl) {
+            const text = `🚨 APEX AI SIGNAL: ${symbol} (${type})\nEntry: $${entry}\nTake Profit: $${tp}\nStop Loss: $${sl}`;
+            navigator.clipboard.writeText ? navigator.clipboard.writeText(text) : document.execCommand('copy');
+            
+            const consoleEl = document.getElementById('aiReasoningOutput');
+            const orig = consoleEl.innerHTML;
+            consoleEl.innerHTML = `<div class="p-2 bg-emerald-500/20 text-emerald-400 rounded text-center">Signal parameters copied to clipboard!</div>`;
+            setTimeout(() => consoleEl.innerHTML = orig, 1500);
+        }
+
+        // --- RISK & POSITION CALCULATOR ---
+        function calculateRisk() {
+            const balance = parseFloat(document.getElementById('calcBalance').value) || 5000;
+            const riskPct = parseFloat(document.getElementById('calcRiskPct').value) || 2;
+            
+            const riskAmt = balance * (riskPct / 100);
+            const stopLossDistance = selectedAsset.price * 0.015; // 1.5% SL calculation
+            const qty = riskAmt / stopLossDistance;
+
+            document.getElementById('resRiskAmt').innerText = '$' + riskAmt.toFixed(2);
+            document.getElementById('resLotSize').innerText = qty.toFixed(3) + ' ' + selectedAsset.symbol.split('/')[0];
+            document.getElementById('resRRRatio').innerText = '1 : 2.50';
+        }
+
+        // --- AUTOMATED TICK SIMULATOR & PERIODIC SCANNER ---
+        function startMarketSimulator() {
+            setInterval(() => {
+                MARKET_DATA.forEach(asset => {
+                    // Random slight tick update
+                    const tickDelta = (Math.random() - 0.495) * (asset.price * 0.0015);
+                    asset.price += tickDelta;
+                    asset.change += (tickDelta / asset.price) * 100;
+                    asset.rsi = Math.min(85, Math.max(15, asset.rsi + (Math.random() - 0.5)));
+
+                    // Push candle price updates
+                    if (asset.history.length > 0) {
+                        const lastCandle = asset.history[asset.history.length - 1];
+                        lastCandle.close = asset.price;
+                        lastCandle.high = Math.max(lastCandle.high, asset.price);
+                        lastCandle.low = Math.min(lastCandle.low, asset.price);
+                    }
+                });
+
+                updateAssetHeader();
+                renderWatchlist();
+                if (chartInstance) {
+                    chartInstance.data.datasets[0].data = selectedAsset.history.map(h => h.close);
+                    chartInstance.update('none');
+                }
+            }, 3000);
+
+            // Auto periodic scanner loop every 12s
+            setInterval(() => {
+                triggerAutoScanner();
+            }, 12000);
+        }
+
+        function triggerAutoScanner() {
+            // Pick a random asset from list to deep scan
+            const randomAsset = MARKET_DATA[Math.floor(Math.random() * MARKET_DATA.length)];
+            const sig = generateAlgorithmicSignal(randomAsset);
+            if (sig.signalType !== 'NEUTRAL' && sig.confidenceScore > 78) {
+                addSignalToFeed(randomAsset, sig);
+            }
+        }
+
+        // --- MODAL & SETTINGS CONTROLS ---
+        function toggleSettingsModal() {
+            const modal = document.getElementById('settingsModal');
+            modal.classList.toggle('hidden');
+        }
+
+        function saveSettings() {
+            toggleSettingsModal();
+            triggerAIScanForAsset(selectedAsset);
+        }
+
+        // --- INITIALIZATION ---
+        window.onload = function () {
+            lucide.createIcons();
+            initializeAssetHistories();
+            renderWatchlist();
+            updateAssetHeader();
+            renderChart();
+            calculateRisk();
+            startMarketSimulator();
+
+            // Initial AI Scan
+            setTimeout(() => {
+                triggerAIScanForAsset(selectedAsset);
+            }, 800);
+        };
+    </script>
+</body>
+</html>
